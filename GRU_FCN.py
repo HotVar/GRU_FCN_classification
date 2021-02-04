@@ -15,7 +15,7 @@ class Vanilla_GRU(nn.Module):
         self.gru = nn.GRU(input_size, hidden_size, num_layers, batch_first=True, dropout=self.dropout_rate)
 
     def init_hidden(self):
-        return torch.zeros(self.num_layers, self.batch_size, self.hidden_size, device=self.device)
+        return torch.zeros(self.num_layers, self.batch_size, self.hidden_size).to(self.device)
 
     def forward(self, seq):
         hidden = self.init_hidden()
@@ -38,7 +38,7 @@ class FCN_1D(nn.Module):
                                padding_mode='replicate'
                                )
         torch.nn.init.xavier_uniform_(self.conv1.weight)
-        self.bn1 = nn.BatchNorm1d(128)
+        self.bn1 = nn.BatchNorm1d(128, eps=1e-03, momentum=0.99)
 
         self.conv2 = nn.Conv1d(in_channels=out_channels,
                                out_channels=out_channels*2,
@@ -47,7 +47,7 @@ class FCN_1D(nn.Module):
                                padding_mode='replicate'
                                )
         torch.nn.init.xavier_uniform_(self.conv2.weight)
-        self.bn2 = nn.BatchNorm1d(256)
+        self.bn2 = nn.BatchNorm1d(256, eps=1e-03, momentum=0.99)
 
         self.conv3 = nn.Conv1d(in_channels=out_channels*2,
                                out_channels=out_channels,
@@ -56,7 +56,7 @@ class FCN_1D(nn.Module):
                                padding_mode='replicate'
                                )
         torch.nn.init.xavier_uniform_(self.conv3.weight)
-        self.bn3 = nn.BatchNorm1d(128)
+        self.bn3 = nn.BatchNorm1d(128, eps=1e-03, momentum=0.99)
 
         self.gap = nn.AdaptiveAvgPool1d(1)
 
@@ -82,25 +82,22 @@ class FCN_1D(nn.Module):
 
 
 class GRU_FCN(nn.Module):
-    def __init__(self, GRU, FCN, batch_size, seq_len, n_class, device):
+    def __init__(self, GRU, FCN, batch_size, seq_len, n_class):
         super().__init__()
         self.GRU = GRU
         self.FCN = FCN
         self.batch_size = batch_size
         self.seq_len = seq_len
         self.n_class = n_class
-        self.device = device
 
-        self.Dense = nn.Linear(in_features=134, out_features=n_class)
-        self.softmax = nn.Softmax()
+        self.Dense = nn.Linear(in_features=144, out_features=n_class)
 
     def forward(self, seq):
         y_GRU, _ = self.GRU(seq)
-        y_GRU = y_GRU.squeeze()[-1]
+        y_GRU = y_GRU.transpose(0, 1)[-1]
         y_FCN = self.FCN(seq).squeeze()
-        concat = torch.cat([y_GRU, y_FCN], 0)
+        if len(y_FCN.size()) == 1:
+            y_FCN = y_FCN.unsqueeze(0)
+        concat = torch.cat([y_GRU, y_FCN], 1)
         y = self.Dense(concat)
-        y = self.softmax(y)
         return y
-
-
