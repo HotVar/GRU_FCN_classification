@@ -50,15 +50,18 @@ def DA_Scaling(X, sigma=0.1):
     myNoise = np.matmul(np.ones((X.shape[0],1)), scalingFactor)
     return X*myNoise
 
-# 3. Manitude Warping
+# 3. Magnitude Warping
 def GenerateRandomCurves(X, sigma=0.2, knot=4):
     xx = (np.ones((X.shape[1],1))*(np.arange(0,X.shape[0], (X.shape[0]-1)/(knot+1)))).transpose()
     yy = np.random.normal(loc=1.0, scale=sigma, size=(knot+2, X.shape[1]))
     x_range = np.arange(X.shape[0])
-    cs_x = CubicSpline(xx[:,0], yy[:,0])
-    cs_y = CubicSpline(xx[:,1], yy[:,1])
-    cs_z = CubicSpline(xx[:,2], yy[:,2])
-    return np.array([cs_x(x_range),cs_y(x_range),cs_z(x_range)]).transpose()
+    cs1_x = CubicSpline(xx[:,0], yy[:,0])
+    cs1_y = CubicSpline(xx[:,1], yy[:,1])
+    cs1_z = CubicSpline(xx[:,2], yy[:,2])
+    cs2_x = CubicSpline(xx[:, 3], yy[:, 3])
+    cs2_y = CubicSpline(xx[:, 4], yy[:, 4])
+    cs2_z = CubicSpline(xx[:, 5], yy[:, 5])
+    return np.array([cs1_x(x_range),cs1_y(x_range),cs1_z(x_range),cs2_x(x_range),cs2_y(x_range),cs2_z(x_range)]).transpose()
 
 def DA_MagWarp(X, sigma=0.2):
     return X * GenerateRandomCurves(X, sigma)

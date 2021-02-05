@@ -90,7 +90,7 @@ class GRU_FCN(nn.Module):
         self.seq_len = seq_len
         self.n_class = n_class
 
-        self.Dense = nn.Linear(in_features=144, out_features=n_class)
+        self.Dense = nn.Linear(in_features=134, out_features=n_class)
 
     def forward(self, seq):
         y_GRU, _ = self.GRU(seq)
