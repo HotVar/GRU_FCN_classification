@@ -82,7 +82,7 @@ class FCN_1D(nn.Module):
 
 
 class GRU_FCN(nn.Module):
-    def __init__(self, GRU, FCN, batch_size, seq_len, n_class):
+    def __init__(self, GRU, FCN, gru_hidden_size, batch_size, seq_len, n_class):
         super().__init__()
         self.GRU = GRU
         self.FCN = FCN
@@ -90,7 +90,7 @@ class GRU_FCN(nn.Module):
         self.seq_len = seq_len
         self.n_class = n_class
 
-        self.Dense = nn.Linear(in_features=134, out_features=n_class)
+        self.Dense = nn.Linear(in_features=128+gru_hidden_size, out_features=n_class)
 
     def forward(self, seq):
         y_GRU, _ = self.GRU(seq)
