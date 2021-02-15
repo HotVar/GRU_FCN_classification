@@ -23,6 +23,21 @@ class Vanilla_GRU(nn.Module):
         output, hidden = self.gru(seq, hidden)
         return output, hidden
 
+class Squeeze_Excite(nn.Module):
+    def __init__(self, channel, reduction=16):
+        super().__init__()
+        self.squeeze = nn.AdaptiveAvgPool1d(1)
+        self.excite = nn.Sequential(nn.Linear(channel, channel // reduction, bias=False),
+                                    nn.ReLU(inplace=True),
+                                    nn.Linear(channel // reduction, channel, bias=False),
+                                    nn.Sigmoid()
+                                    )
+
+    def forward(self, x):
+        b, c, s = x.size()
+        y = self.squeeze(x).view(b, c)
+        y = self.excite(y).view(b, c, 1)
+        return x * y.expand_as(x)
 
 class FCN_1D(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -39,6 +54,7 @@ class FCN_1D(nn.Module):
                                )
         torch.nn.init.xavier_uniform_(self.conv1.weight)
         self.bn1 = nn.BatchNorm1d(128, eps=1e-03, momentum=0.99)
+        self.SE1 = Squeeze_Excite(128)
 
         self.conv2 = nn.Conv1d(in_channels=out_channels,
                                out_channels=out_channels*2,
@@ -48,6 +64,7 @@ class FCN_1D(nn.Module):
                                )
         torch.nn.init.xavier_uniform_(self.conv2.weight)
         self.bn2 = nn.BatchNorm1d(256, eps=1e-03, momentum=0.99)
+        self.SE2 = Squeeze_Excite(256)
 
         self.conv3 = nn.Conv1d(in_channels=out_channels*2,
                                out_channels=out_channels,
@@ -67,10 +84,12 @@ class FCN_1D(nn.Module):
         y = self.conv1(adj_seq)
         y = self.bn1(y)
         y = self.relu(y)
+        y = self.SE1(y)
 
         y = self.conv2(y)
         y = self.bn2(y)
         y = self.relu(y)
+        y = self.SE2(y)
 
         y = self.conv3(y)
         y = self.bn3(y)

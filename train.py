@@ -48,23 +48,28 @@ class Exercise_dataset(Dataset):
         return seq
 
 
-def train(BATCH_SIZE_INDEX, N_EPOCHS, AUG_RATE, hidden_size, num_layers, dropout_rate, learning_rate, bayesian_optim=True):
+#def train(BATCH_SIZE_INDEX, AUG_RATE, hidden_size, num_layers, dropout_rate, learning_rate, bayesian_optim=True):
+def train(hidden_size, num_layers, dropout_rate, learning_rate, bayesian_optim=True):
+    N_EPOCHS = 200
+
     # all hyper-param args should be adjusted.
-    BATCH_SIZE = [64, 128, 256][int(BATCH_SIZE_INDEX)]
+    #BATCH_SIZE = [64, 128, 256][int(BATCH_SIZE_INDEX)]
+    BATCH_SIZE = 128
+    AUG_RATE = 1.0
 
     data = pd.read_csv('open/train_features.csv')
     label = pd.read_csv('open/train_labels.csv')
 
     CV = False
 
-    VIS_FREQ = 10
+    VIS_FREQ = 5
     N_CLASSES = len(label['label'].unique())
 
     aug_funcs = []
     aug_funcs.append(DA_Jitter)
     aug_funcs.append(DA_Scaling)
     aug_funcs.append(DA_MagWarp)
-    # aug_funcs.append(DA_TimeWarp)
+    aug_funcs.append(DA_TimeWarp)
     # aug_funcs.append(DA_Rotation)
     # aug_funcs.append(DA_Permutation)
     # aug_funcs.append(DA_RandSampling)
@@ -87,7 +92,8 @@ def train(BATCH_SIZE_INDEX, N_EPOCHS, AUG_RATE, hidden_size, num_layers, dropout
         data_yield = enumerate(zip([train_data], [valid_data]))
 
     for k, (train_id, valid_id) in data_yield:
-        print(f'Fold {k} ' + '=' * 50)
+        if not bayesian_optim:
+            print(f'Fold {k} ' + '=' * 50)
         X_train = data[data['id'].isin(train_id)]
         y_train = label[label['id'].isin(train_id)]
         X_valid = data[data['id'].isin(valid_id)]
@@ -161,23 +167,20 @@ def train(BATCH_SIZE_INDEX, N_EPOCHS, AUG_RATE, hidden_size, num_layers, dropout
                     loss = loss_CE(pred, valid_label)
                     loss_valid.update(loss.item())
 
-            if epoch % VIS_FREQ == 0:
+            if epoch % VIS_FREQ == 0 and not bayesian_optim:
                 print(f'Epoch[{epoch+1}] : {loss_train}, {loss_valid}')
 
 
     if bayesian_optim:
-        return 1 - loss_valid.avg
+        return -loss_valid.avg
     else:
         return loss_train, loss_valid, model
 
 
 if __name__ == '__main__':
-    loss_train, loss_valid, model = train(BATCH_SIZE_INDEX=1,
-                                          N_EPOCHS=200,
-                                          AUG_RATE=0.5,
-                                          hidden_size=6,
-                                          num_layers=1,
-                                          dropout_rate=0.8,
-                                          learning_rate=1e-03,
+    loss_train, loss_valid, model = train(hidden_size=3.39,
+                                          num_layers=3.5,
+                                          dropout_rate=0.59,
+                                          learning_rate=0.00607584,
                                           bayesian_optim=False)
     torch.save(model, f'{str(datetime.today().date())}_model.pth')
