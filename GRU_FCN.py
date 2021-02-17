@@ -9,10 +9,9 @@ class Vanilla_GRU(nn.Module):
         self.num_layers = num_layers
         self.output_size = output_size
         self.batch_size = batch_size
-        self.dropout_rate = dropout_rate
         self.device = device
 
-        self.gru = nn.GRU(input_size, hidden_size, num_layers, batch_first=True, dropout=self.dropout_rate)
+        self.gru = nn.GRU(input_size, hidden_size, num_layers, batch_first=True)
 
     def init_hidden(self):
         return torch.zeros(self.num_layers, self.batch_size, self.hidden_size).to(self.device)
@@ -53,8 +52,8 @@ class FCN_1D(nn.Module):
                                padding_mode='replicate'
                                )
         torch.nn.init.xavier_uniform_(self.conv1.weight)
-        self.bn1 = nn.BatchNorm1d(128, eps=1e-03, momentum=0.99)
-        self.SE1 = Squeeze_Excite(128)
+        self.bn1 = nn.BatchNorm1d(512, eps=1e-03, momentum=0.99)
+        self.SE1 = Squeeze_Excite(512)
 
         self.conv2 = nn.Conv1d(in_channels=out_channels,
                                out_channels=out_channels*2,
@@ -63,8 +62,8 @@ class FCN_1D(nn.Module):
                                padding_mode='replicate'
                                )
         torch.nn.init.xavier_uniform_(self.conv2.weight)
-        self.bn2 = nn.BatchNorm1d(256, eps=1e-03, momentum=0.99)
-        self.SE2 = Squeeze_Excite(256)
+        self.bn2 = nn.BatchNorm1d(1024, eps=1e-03, momentum=0.99)
+        self.SE2 = Squeeze_Excite(1024)
 
         self.conv3 = nn.Conv1d(in_channels=out_channels*2,
                                out_channels=out_channels,
@@ -73,7 +72,7 @@ class FCN_1D(nn.Module):
                                padding_mode='replicate'
                                )
         torch.nn.init.xavier_uniform_(self.conv3.weight)
-        self.bn3 = nn.BatchNorm1d(128, eps=1e-03, momentum=0.99)
+        self.bn3 = nn.BatchNorm1d(512, eps=1e-03, momentum=0.99)
 
         self.gap = nn.AdaptiveAvgPool1d(1)
 
@@ -101,7 +100,7 @@ class FCN_1D(nn.Module):
 
 
 class GRU_FCN(nn.Module):
-    def __init__(self, GRU, FCN, gru_hidden_size, batch_size, seq_len, n_class):
+    def __init__(self, GRU, FCN, gru_hidden_size, batch_size, seq_len, n_class, dropout_rate):
         super().__init__()
         self.GRU = GRU
         self.FCN = FCN
@@ -109,11 +108,14 @@ class GRU_FCN(nn.Module):
         self.seq_len = seq_len
         self.n_class = n_class
 
-        self.Dense = nn.Linear(in_features=128+gru_hidden_size, out_features=n_class)
+        self.dropout = nn.Dropout(p=dropout_rate)
+        self.Dense = nn.Linear(in_features=512+gru_hidden_size, out_features=n_class)
 
     def forward(self, seq):
+        # y_GRU, _ = self.GRU(seq.transpose(1, 2))
         y_GRU, _ = self.GRU(seq)
         y_GRU = y_GRU.transpose(0, 1)[-1]
+        y_GRU = self.dropout(y_GRU)
         y_FCN = self.FCN(seq).squeeze()
         if len(y_FCN.size()) == 1:
             y_FCN = y_FCN.unsqueeze(0)

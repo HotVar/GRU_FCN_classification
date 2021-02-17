@@ -3,6 +3,7 @@ import numpy as np
 from datetime import datetime
 
 from sklearn.model_selection import KFold, train_test_split
+from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import Dataset, DataLoader
 
 from GRU_FCN import *
@@ -17,6 +18,7 @@ class Exercise_dataset(Dataset):
         self.device = device
         self.unique_ids = self.df['id'].unique()
         self.unique_labels = self.label['label'].unique()
+        self.scaler = MinMaxScaler(feature_range=(0, 1))
 
     def __len__(self):
         return len(self.unique_ids)
@@ -28,6 +30,7 @@ class Exercise_dataset(Dataset):
         sample = dict()
         seq = self.df[self.df['id'] == id_].iloc[:, 2:].values
         seq = self.augmentation_1d(seq)
+        seq = self.scaler.fit_transform(seq)
         sample['seq'] = torch.Tensor(seq)
         sample['label'] = torch.Tensor([self.label[self.label['id'] == id_].iloc[0, 1]])
 
@@ -49,11 +52,12 @@ class Exercise_dataset(Dataset):
 
 
 #def train(BATCH_SIZE_INDEX, AUG_RATE, hidden_size, num_layers, dropout_rate, learning_rate, bayesian_optim=True):
-def train(hidden_size, num_layers, dropout_rate, learning_rate, bayesian_optim=True):
+def train(hidden_size, num_layers, dropout_rate, bayesian_optim=True):
     N_EPOCHS = 200
 
     # all hyper-param args should be adjusted.
     #BATCH_SIZE = [64, 128, 256][int(BATCH_SIZE_INDEX)]
+    learning_rate = 1e-03
     BATCH_SIZE = 128
     AUG_RATE = 1.0
 
@@ -61,15 +65,16 @@ def train(hidden_size, num_layers, dropout_rate, learning_rate, bayesian_optim=T
     label = pd.read_csv('open/train_labels.csv')
 
     CV = False
+    split = True
 
-    VIS_FREQ = 5
+    VIS_FREQ = 1
     N_CLASSES = len(label['label'].unique())
 
     aug_funcs = []
     aug_funcs.append(DA_Jitter)
     aug_funcs.append(DA_Scaling)
-    aug_funcs.append(DA_MagWarp)
-    aug_funcs.append(DA_TimeWarp)
+    # aug_funcs.append(DA_MagWarp)
+    # aug_funcs.append(DA_TimeWarp)
     # aug_funcs.append(DA_Rotation)
     # aug_funcs.append(DA_Permutation)
     # aug_funcs.append(DA_RandSampling)
@@ -89,6 +94,8 @@ def train(hidden_size, num_layers, dropout_rate, learning_rate, bayesian_optim=T
                                                   test_size=0.25,
                                                   random_state=42,
                                                   shuffle=True)
+        if not split:
+            train_data = np.concatenate([train_data, valid_data])
         data_yield = enumerate(zip([train_data], [valid_data]))
 
     for k, (train_id, valid_id) in data_yield:
@@ -112,23 +119,24 @@ def train(hidden_size, num_layers, dropout_rate, learning_rate, bayesian_optim=T
                                 dropout_rate=dropout_rate,
                                 device=device).to(device)
         FCN_model = FCN_1D(in_channels=6,
-                           out_channels=128).to(device)
+                           out_channels=512).to(device)
         model = GRU_FCN(GRU=GRU_model,
                         FCN=FCN_model,
                         gru_hidden_size=round(hidden_size),
                         batch_size=BATCH_SIZE,
                         seq_len=600,
-                        n_class=len(label['label'].unique())).to(device)
+                        n_class=len(label['label'].unique()),
+                        dropout_rate=dropout_rate).to(device)
 
         loss_CE = nn.CrossEntropyLoss()
         optim = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-02)
 
         loss_train = AverageMeter('loss_train', ':.6f')
-        loss_valid = AverageMeter('loss_valid', ':.6f')
+        if split:
+            loss_valid = AverageMeter('loss_valid', ':.6f')
 
         for epoch in range(round(N_EPOCHS)):
             for i, (train_sample, valid_sample) in enumerate(zip(train_dataloader, valid_dataloader)):
-
                 train_seq = train_sample['seq'].to(device)
                 train_label = train_sample['label'].to(device).long()
 
@@ -150,37 +158,43 @@ def train(hidden_size, num_layers, dropout_rate, learning_rate, bayesian_optim=T
                 loss.backward()
                 optim.step()
 
-                with torch.no_grad():
-                    valid_seq = valid_sample['seq'].to(device)
-                    valid_label = valid_sample['label'].to(device).long()
+                if split:
+                    with torch.no_grad():
+                        valid_seq = valid_sample['seq'].to(device)
+                        valid_label = valid_sample['label'].to(device).long()
 
-                    if valid_label.size(0) > 1:  # multi batch case
-                        valid_label = valid_label.squeeze()
-                    else:  # single batch case
-                        valid_label = valid_label.squeeze(0)
+                        if valid_label.size(0) > 1:  # multi batch case
+                            valid_label = valid_label.squeeze()
+                        else:  # single batch case
+                            valid_label = valid_label.squeeze(0)
 
-                    pred = model(valid_seq)
+                        pred = model(valid_seq)
 
-                    if pred.size(0) == N_CLASSES:
-                        pred = pred.unsqueeze(0)
+                        if pred.size(0) == N_CLASSES:
+                            pred = pred.unsqueeze(0)
 
-                    loss = loss_CE(pred, valid_label)
-                    loss_valid.update(loss.item())
+                        loss = loss_CE(pred, valid_label)
+                        loss_valid.update(loss.item())
 
             if epoch % VIS_FREQ == 0 and not bayesian_optim:
-                print(f'Epoch[{epoch+1}] : {loss_train}, {loss_valid}')
+                if split:
+                    print(f'Epoch[{epoch+1}] : {loss_train}, {loss_valid}')
+                else:
+                    print(f'Epoch[{epoch+1}] : {loss_train}')
 
 
     if bayesian_optim:
         return -loss_valid.avg
     else:
-        return loss_train, loss_valid, model
+        if split:
+            return loss_train, loss_valid, model
+        else:
+            return loss_train, [], model
 
 
 if __name__ == '__main__':
-    loss_train, loss_valid, model = train(hidden_size=3.39,
-                                          num_layers=3.5,
-                                          dropout_rate=0.59,
-                                          learning_rate=0.00607584,
+    loss_train, loss_valid, model = train(hidden_size=256,
+                                          num_layers=2,
+                                          dropout_rate=0.8,
                                           bayesian_optim=False)
     torch.save(model, f'{str(datetime.today().date())}_model.pth')
