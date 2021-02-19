@@ -47,13 +47,13 @@ class FCN_1D(nn.Module):
         self.relu = nn.ReLU()
         self.conv1 = nn.Conv1d(in_channels=in_channels,
                                out_channels=out_channels,
-                               kernel_size=9,
+                               kernel_size=8,
                                padding=4,
                                padding_mode='replicate'
                                )
         torch.nn.init.xavier_uniform_(self.conv1.weight)
-        self.bn1 = nn.BatchNorm1d(512, eps=1e-03, momentum=0.99)
-        self.SE1 = Squeeze_Excite(512)
+        self.bn1 = nn.BatchNorm1d(128, eps=1e-03, momentum=0.99)
+        self.SE1 = Squeeze_Excite(128)
 
         self.conv2 = nn.Conv1d(in_channels=out_channels,
                                out_channels=out_channels*2,
@@ -62,8 +62,8 @@ class FCN_1D(nn.Module):
                                padding_mode='replicate'
                                )
         torch.nn.init.xavier_uniform_(self.conv2.weight)
-        self.bn2 = nn.BatchNorm1d(1024, eps=1e-03, momentum=0.99)
-        self.SE2 = Squeeze_Excite(1024)
+        self.bn2 = nn.BatchNorm1d(256, eps=1e-03, momentum=0.99)
+        self.SE2 = Squeeze_Excite(256)
 
         self.conv3 = nn.Conv1d(in_channels=out_channels*2,
                                out_channels=out_channels,
@@ -72,8 +72,7 @@ class FCN_1D(nn.Module):
                                padding_mode='replicate'
                                )
         torch.nn.init.xavier_uniform_(self.conv3.weight)
-        self.bn3 = nn.BatchNorm1d(512, eps=1e-03, momentum=0.99)
-
+        self.bn3 = nn.BatchNorm1d(128, eps=1e-03, momentum=0.99)
         self.gap = nn.AdaptiveAvgPool1d(1)
 
 
@@ -109,11 +108,11 @@ class GRU_FCN(nn.Module):
         self.n_class = n_class
 
         self.dropout = nn.Dropout(p=dropout_rate)
-        self.Dense = nn.Linear(in_features=512+gru_hidden_size, out_features=n_class)
+        self.Dense = nn.Linear(in_features=128, out_features=n_class)
 
     def forward(self, seq):
-        # y_GRU, _ = self.GRU(seq.transpose(1, 2))
-        y_GRU, _ = self.GRU(seq)
+        y_GRU, _ = self.GRU(seq.transpose(1, 2)) # dimension shuffle
+        # y_GRU, _ = self.GRU(seq)
         y_GRU = y_GRU.transpose(0, 1)[-1]
         y_GRU = self.dropout(y_GRU)
         y_FCN = self.FCN(seq).squeeze()

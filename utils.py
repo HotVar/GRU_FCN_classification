@@ -17,12 +17,14 @@ class AverageMeter(object):
         self.count = 0
         self._list = []
 
-    def update(self, val, n=1):
+    def update(self, val, n=100):
+        self._list.append(val)
+        if len(self._list) > 100:
+            del self._list[0]
         self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-        self._list.append(self.avg)
+        self.sum = sum(self._list)
+        self.avg = self.sum / len(self._list)
+
 
     def __str__(self):
         fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'

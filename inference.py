@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import torch.nn
 
 def inference():
@@ -14,7 +15,7 @@ def inference():
         X = data[data['id'] == id_].iloc[:, 2:].values
         X = torch.Tensor(X).to(device).unsqueeze(0)
 
-        model = torch.load('2021-02-05_200.pth', map_location=torch.device(device))
+        model = torch.load('2021-02-20_model.pth', map_location=torch.device(device))
         model.to(device)
         model.eval()
         model.GRU.batch_size = 1

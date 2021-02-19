@@ -30,7 +30,7 @@ class Exercise_dataset(Dataset):
         sample = dict()
         seq = self.df[self.df['id'] == id_].iloc[:, 2:].values
         seq = self.augmentation_1d(seq)
-        seq = self.scaler.fit_transform(seq)
+        # seq = self.scaler.fit_transform(seq)
         sample['seq'] = torch.Tensor(seq)
         sample['label'] = torch.Tensor([self.label[self.label['id'] == id_].iloc[0, 1]])
 
@@ -51,7 +51,6 @@ class Exercise_dataset(Dataset):
         return seq
 
 
-#def train(BATCH_SIZE_INDEX, AUG_RATE, hidden_size, num_layers, dropout_rate, learning_rate, bayesian_optim=True):
 def train(hidden_size, num_layers, dropout_rate, bayesian_optim=True):
     N_EPOCHS = 200
 
@@ -65,14 +64,14 @@ def train(hidden_size, num_layers, dropout_rate, bayesian_optim=True):
     label = pd.read_csv('open/train_labels.csv')
 
     CV = False
-    split = True
+    split = False
 
     VIS_FREQ = 1
     N_CLASSES = len(label['label'].unique())
 
     aug_funcs = []
-    aug_funcs.append(DA_Jitter)
-    aug_funcs.append(DA_Scaling)
+    # aug_funcs.append(DA_Jitter)
+    # aug_funcs.append(DA_Scaling)
     # aug_funcs.append(DA_MagWarp)
     # aug_funcs.append(DA_TimeWarp)
     # aug_funcs.append(DA_Rotation)
@@ -81,6 +80,7 @@ def train(hidden_size, num_layers, dropout_rate, bayesian_optim=True):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # device = 'cpu'
+    print(f'device : {device}')
 
     unique_ids = data['id'].unique()
 
@@ -111,7 +111,7 @@ def train(hidden_size, num_layers, dropout_rate, bayesian_optim=True):
         valid_dataset = Exercise_dataset(X_valid, y_valid, aug_funcs, AUG_RATE, device)
         valid_dataloader = DataLoader(valid_dataset, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
 
-        GRU_model = Vanilla_GRU(input_size=6,
+        GRU_model = Vanilla_GRU(input_size=600,
                                 hidden_size=round(hidden_size),
                                 num_layers=round(num_layers),
                                 output_size=len(label['label'].unique()),
@@ -119,17 +119,17 @@ def train(hidden_size, num_layers, dropout_rate, bayesian_optim=True):
                                 dropout_rate=dropout_rate,
                                 device=device).to(device)
         FCN_model = FCN_1D(in_channels=6,
-                           out_channels=512).to(device)
+                           out_channels=128).to(device)
         model = GRU_FCN(GRU=GRU_model,
                         FCN=FCN_model,
                         gru_hidden_size=round(hidden_size),
                         batch_size=BATCH_SIZE,
-                        seq_len=600,
+                        seq_len=6,
                         n_class=len(label['label'].unique()),
                         dropout_rate=dropout_rate).to(device)
 
         loss_CE = nn.CrossEntropyLoss()
-        optim = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-02)
+        optim = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
         loss_train = AverageMeter('loss_train', ':.6f')
         if split:
@@ -176,6 +176,11 @@ def train(hidden_size, num_layers, dropout_rate, bayesian_optim=True):
                         loss = loss_CE(pred, valid_label)
                         loss_valid.update(loss.item())
 
+            # reduce learning rate every 10 epochs until it's larger than 1e-04
+            if (epoch + 1) % 11 == 0 and optim.param_groups[0]['lr'] >= 1e-04:
+                optim.param_groups[0]['lr'] /= 2 ** (1 / 3)
+                print(f'modified lr : {optim.param_groups[0]["lr"]}')
+
             if epoch % VIS_FREQ == 0 and not bayesian_optim:
                 if split:
                     print(f'Epoch[{epoch+1}] : {loss_train}, {loss_valid}')
@@ -193,7 +198,7 @@ def train(hidden_size, num_layers, dropout_rate, bayesian_optim=True):
 
 
 if __name__ == '__main__':
-    loss_train, loss_valid, model = train(hidden_size=256,
+    loss_train, loss_valid, model = train(hidden_size=6,
                                           num_layers=2,
                                           dropout_rate=0.8,
                                           bayesian_optim=False)
